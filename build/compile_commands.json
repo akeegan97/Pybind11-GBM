@@ -1,8 +1,0 @@
-[
-{
-  "directory": "/home/andrew-keegan/Desktop/code/python/GBM/build/src",
-  "command": "/usr/bin/g++ -Dsimulation_EXPORTS -isystem /home/andrew-keegan/Desktop/code/python/GBM/GBM/lib/python3.11/site-packages/pybind11/include -isystem /usr/include/python3.11 -g -fPIC -fvisibility=hidden -o CMakeFiles/simulation.dir/cpp/simulation.cpp.o -c /home/andrew-keegan/Desktop/code/python/GBM/src/cpp/simulation.cpp",
-  "file": "/home/andrew-keegan/Desktop/code/python/GBM/src/cpp/simulation.cpp",
-  "output": "src/CMakeFiles/simulation.dir/cpp/simulation.cpp.o"
-}
-]
