@@ -7,3 +7,4 @@ GBM/lib/python3.11/site-packages
 /share
 *.cfg
 /GBM
+/build
