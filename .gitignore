@@ -2,5 +2,6 @@
 /OMCL copy.csv
 /GBM/
 /build/
-/CMakeLists.txt/
+/CMakeLists.txt
+/.vscode/
 
