@@ -1,10 +1,6 @@
-/OMCL copy.csv
 /OMCL.csv
-/bin
-/include
-GBM/lib/python3.11/site-packages
-/lib64
-/share
-*.cfg
-/GBM
-/build
+/OMCL copy.csv
+/GBM/
+/build/
+/CMakeLists.txt/
+
