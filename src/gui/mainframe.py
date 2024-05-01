@@ -183,10 +183,16 @@ class GBMApp:
 #        print(realPrice)
 #        print(simulatedPrice/realPrice)
 #
+#        start_time = time.perf_counter()
+#        walks, averagePrice = simulation.SimulatedGBM(startingPrice,stats.normalizedMu,stats.normalizedVariance,stats.normalizedDeviation,int(self.m_Steps),self.m_Paths)
+#        end_time = time.perf_counter()
+#        print(f"C++ version took {end_time - start_time:.4f} seconds.")
+#        npPaths = np.array(walks)
+#        self.plotGBM(npPaths, self.m_EndDate)
         start_time = time.perf_counter()
-        walks, averagePrice = simulation.SimulatedGBM(startingPrice,stats.normalizedMu,stats.normalizedVariance,stats.normalizedDeviation,int(self.m_Steps),self.m_Paths)
+        walks, averagePrice = simulation.SimulateGBMMultiThreaded(startingPrice,stats.normalizedMu,stats.normalizedVariance,stats.normalizedDeviation,int(self.m_Steps),self.m_Paths)
         end_time = time.perf_counter()
-        print(f"C++ version took {end_time - start_time:.4f} seconds.")
+        print(f"C++ MultiThreaded version took {end_time - start_time:.4f} seconds.")
         npPaths = np.array(walks)
         self.plotGBM(npPaths, self.m_EndDate)
 
