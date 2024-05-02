@@ -173,7 +173,6 @@ class GBMApp:
         comparedData = self.m_Data.iloc[startIndex:endIndex]
         realPrice = comparedData['Close'].iloc[-1]
         startingPrice = self.m_Data.loc[startIndex - 1, 'Close']
-
 #        start_time = time.perf_counter()
 #        paths, simulatedPrice = utilities.GBM(startingPrice,stats.normalizedMu,stats.normalizedVariance,stats.normalizedDeviation,int(self.m_Steps),self.m_Paths)
 #        end_time = time.perf_counter()
@@ -189,10 +188,17 @@ class GBMApp:
 #        print(f"C++ version took {end_time - start_time:.4f} seconds.")
 #        npPaths = np.array(walks)
 #        self.plotGBM(npPaths, self.m_EndDate)
+
         start_time = time.perf_counter()
         walks, averagePrice = simulation.SimulateGBMMultiThreaded(startingPrice,stats.normalizedMu,stats.normalizedVariance,stats.normalizedDeviation,int(self.m_Steps),self.m_Paths)
         end_time = time.perf_counter()
         print(f"C++ MultiThreaded version took {end_time - start_time:.4f} seconds.")
+
+
+        start_time = time.perf_counter()
+        walks, averagePrice = simulation.SimulateGBMIntrinsicMT(startingPrice,stats.normalizedMu,stats.normalizedVariance,stats.normalizedDeviation,int(self.m_Steps),self.m_Paths)
+        end_time = time.perf_counter()
+        print(f"C++ MultiThreaded Intrinsic version took {end_time - start_time:.4f} seconds.")
         npPaths = np.array(walks)
         self.plotGBM(npPaths, self.m_EndDate)
 
