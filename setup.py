@@ -1,13 +1,22 @@
-from setuptools import setup,find_packages,Extension
+from setuptools import setup, find_packages
+from pybind11.setup_helpers import Pybind11Extension, build_ext
 
-
+ext_modules = [
+    Pybind11Extension(
+        "gbmapp.simulation",
+        ["src/cpp/simulation.cpp"],
+        cxx_std=17,
+        extra_compile_args=[
+            "-O3",
+            "-mavx",
+            "-mavx2",
+            "-mfma",
+        ],
+    ),
+]
 setup(
-    name='GBMApp',
-    version='0.1.0',
-    packages=find_packages(),
-    # Uncomment the following line when C++ files are added
-    # ext_modules=ext_modules,
-    entry_points={
-        'console_scripts': ['gbmapp=src.gui.mainframe:main']
-    },
+    package_dir={"": "src"},
+    packages=find_packages("src"),
+    ext_modules=ext_modules,
+    cmdclass={"build_ext": build_ext},
 )

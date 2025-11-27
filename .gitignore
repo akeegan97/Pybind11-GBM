@@ -1,7 +1,54 @@
-/OMCL.csv
-/OMCL copy.csv
-/GBM/
-/build/
-/CMakeLists.txt
-/.vscode/
+# Python
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
 
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# C++ build artifacts
+*.o
+*.a
+*.lib
+*.dll
+*.dylib
+*.exe
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Data files
+*.csv
+!example*.csv
+
+# Compiled extensions
+*.pyd
+*.so
+
+# Logs and temp files
+*.log
+*.tmp
+*.bak
+
+# OS
+Thumbs.db
+.venv/pyvenv.cfg
