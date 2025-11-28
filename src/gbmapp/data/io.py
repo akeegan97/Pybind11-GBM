@@ -113,12 +113,22 @@ class DataLoader:
         
         Args:
             data: DataFrame containing the stock data.
-            date: Date to verify (string format).
+            date: Date to verify (string format - YYYY-MM-DD preferred).
             
         Returns:
             True if the date exists in the data.
+            
+        Raises:
+            ValueError: If date format is invalid.
         """
-        date_obj = pd.to_datetime(date)
+        try:
+            date_obj = pd.to_datetime(date, format='%Y-%m-%d')
+        except:
+            # Try with other common formats
+            try:
+                date_obj = pd.to_datetime(date)
+            except Exception as e:
+                raise ValueError(f"Invalid date format '{date}'. Please use YYYY-MM-DD (e.g., 2024-01-15)")
         return date_obj in data['Date'].values
     
     @staticmethod

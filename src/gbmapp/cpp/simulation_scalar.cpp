@@ -33,29 +33,34 @@ SimulationResult SimulateGBMScalar(
     displayPaths.reserve(displayPathsCount);
     
     double sumFinalPrices = 0.0;
+    double compensation = 0.0;  // For Kahan summation
+    double logStartPrice = std::log(startingPrice);  // IMPROVED: Pre-compute log
     
     // Simulate paths
     for (int i = 0; i < paths; ++i) {
-        double price = startingPrice;
+        double logPrice = logStartPrice;  // IMPROVED: Start in log-space
         std::vector<double> path;
         
         // Collect path data for display paths
         if (i < displayPathsCount) {
             path.reserve(steps);
-            path.push_back(price);
+            path.push_back(startingPrice);  // First point is starting price
         }
         
-        // Simulate price path
+        // Simulate price path in log-space
         for (int j = 1; j < steps; ++j) {
             double noise = d(gen);
-            price *= std::exp(partialComputation + normalizedStd * sqrtDeltaT * noise);
+            // IMPROVED: Accumulate log-returns instead of multiplying
+            logPrice += partialComputation + normalizedStd * sqrtDeltaT * noise;
             
             if (i < displayPathsCount) {
-                path.push_back(price);
+                // Exponentiate for display
+                path.push_back(std::exp(logPrice));
             }
         }
         
-        sumFinalPrices += price;
+        // IMPROVED: Exponentiate only once at end for final price
+        KahanAdd(sumFinalPrices, compensation, std::exp(logPrice));
         
         if (i < displayPathsCount) {
             displayPaths.push_back(std::move(path));

@@ -30,6 +30,8 @@ void SimulatePathsWorker(
 ) {
     std::vector<std::vector<double>> localDisplayPaths;
     double sumFinalPrices = 0.0;
+    double compensation = 0.0;  // For Kahan summation
+    double logStartPrice = std::log(startingPrice);  // IMPROVED: Pre-compute log
     
     // Thread-local random number generation
     std::random_device rd;
@@ -37,24 +39,27 @@ void SimulatePathsWorker(
     std::normal_distribution<double> d(0.0, 1.0);
     
     for (int i = 0; i < numPaths; ++i) {
-        double price = startingPrice;
+        double logPrice = logStartPrice;  // IMPROVED: Start in log-space
         std::vector<double> path;
         
         if (collectDisplayPaths && localDisplayPaths.size() < 50) {
             path.reserve(steps);
-            path.push_back(price);
+            path.push_back(startingPrice);  // First point is starting price
         }
         
-        // Simulate price path
+        // Simulate price path in log-space
         for (int j = 1; j < steps; ++j) {
-            price *= std::exp(partialComputation + normalizedStd * sqrtDeltaT * d(gen));
+            // IMPROVED: Accumulate log-returns
+            logPrice += partialComputation + normalizedStd * sqrtDeltaT * d(gen);
             
             if (collectDisplayPaths && localDisplayPaths.size() < 50) {
-                path.push_back(price);
+                // Exponentiate for display
+                path.push_back(std::exp(logPrice));
             }
         }
         
-        sumFinalPrices += price;
+        // IMPROVED: Exponentiate only once at end
+        KahanAdd(sumFinalPrices, compensation, std::exp(logPrice));
         
         if (collectDisplayPaths && localDisplayPaths.size() < 50) {
             localDisplayPaths.push_back(std::move(path));

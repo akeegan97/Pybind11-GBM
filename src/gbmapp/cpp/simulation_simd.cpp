@@ -42,14 +42,18 @@ double CalculateSIMDPaths(
     double partialComputation,
     double normalizedStd,
     double sqrtDeltaT
-) {
+) 
+{
+    // Use Kahan summation for numerical stability with millions of paths
     double sumFinalPrices = 0.0;
+    double compensation = 0.0;
     alignas(32) double finalPrices[4];
 
     // Pre-compute SIMD constants
     __m256d _normalStdVec = _mm256_set1_pd(normalizedStd);
     __m256d _partialCompVec = _mm256_set1_pd(partialComputation);
     __m256d _sqrtDTVec = _mm256_set1_pd(sqrtDeltaT);
+    __m256d _logStartPrice = _mm256_set1_pd(std::log(startingPrice));
 
     // Thread-local random number generation
     std::random_device rd;
@@ -60,14 +64,11 @@ double CalculateSIMDPaths(
     int simdPaths = (numPaths / 4) * 4;
     
     for (int i = 0; i < simdPaths; i += 4) {
-        // Initialize prices
-        alignas(32) double prices[4];
-        for (int k = 0; k < 4; ++k) {
-            prices[k] = startingPrice;
-        }
-        __m256d _prices = _mm256_load_pd(prices);
+        // IMPROVED: Stay in log-space, initialize with log(starting_price)
+        __m256d _logPrices = _logStartPrice;
+        __m256d _a = _mm256_mul_pd(_normalStdVec, _sqrtDTVec); // Moved out of hot loop
 
-        // Simulate steps for 4 paths simultaneously
+        // Simulate steps for 4 paths simultaneously - accumulate log-returns
         for (int j = 1; j < steps; ++j) {
             // Generate random numbers
             alignas(32) double ranNums[4];
@@ -75,32 +76,36 @@ double CalculateSIMDPaths(
                 ranNums[k] = d(gen);
             }
             __m256d _normalDistrValues = _mm256_loadu_pd(ranNums);
-
-            // Compute: exp(partialComputation + normalizedStd * sqrtDeltaT * noise)
-            __m256d _a = _mm256_mul_pd(_normalStdVec, _sqrtDTVec);
-            __m256d _c = _mm256_fmadd_pd(_a, _normalDistrValues, _partialCompVec);
-            __m256d _d = exp_approx(_c);
-            _prices = _mm256_mul_pd(_prices, _d);
+            
+            // IMPROVED: Accumulate log-returns instead of multiplying prices
+            // log_return = partialComputation + normalizedStd * sqrtDeltaT * noise
+            __m256d _logReturn = _mm256_fmadd_pd(_a, _normalDistrValues, _partialCompVec);
+            _logPrices = _mm256_add_pd(_logPrices, _logReturn);
         }
 
-        // Store final prices and accumulate
-        _mm256_storeu_pd(finalPrices, _prices);
+        // IMPROVED: Exponentiate only once at the end to get actual prices
+        // Use standard library exp for final conversion (more accurate than approx)
+        _mm256_storeu_pd(finalPrices, _logPrices);
         for (int k = 0; k < 4; ++k) {
-            sumFinalPrices += finalPrices[k];
+            KahanAdd(sumFinalPrices, compensation, std::exp(finalPrices[k]));
         }
     }
 
     // Handle remaining paths (if numPaths not divisible by 4)
+    double logStartPrice = std::log(startingPrice);
     for (int i = simdPaths; i < numPaths; ++i) {
-        double price = startingPrice;
+        double logPrice = logStartPrice;
         for (int j = 1; j < steps; ++j) {
             double noise = d(gen);
-            price *= std::exp(partialComputation + normalizedStd * sqrtDeltaT * noise);
+            // IMPROVED: Accumulate log-returns
+            logPrice += partialComputation + normalizedStd * sqrtDeltaT * noise;
         }
-        sumFinalPrices += price;
+        // IMPROVED: Exponentiate once at the end
+        KahanAdd(sumFinalPrices, compensation, std::exp(logPrice));
     }
 
-    return sumFinalPrices / numPaths;
+    // FIXED: Return sum, not average - let caller handle final averaging
+    return sumFinalPrices;
 }
 
 void SIMDWorker(
@@ -110,14 +115,14 @@ void SIMDWorker(
     double partialComputation,
     double normalizedStd,
     double sqrtDeltaT,
-    std::vector<double>& averagePrices,
+    std::vector<double>& sumPrices,
     int threadIndex
 ) {
-    double avg = CalculateSIMDPaths(
+    double sum = CalculateSIMDPaths(
         numPaths, steps, startingPrice,
         partialComputation, normalizedStd, sqrtDeltaT
     );
-    averagePrices[threadIndex] = avg;
+    sumPrices[threadIndex] = sum;
 }
 
 } // anonymous namespace
@@ -138,7 +143,7 @@ SimulationResult SimulateGBMIntrinsicMT(
     double partialComputation = (normalizedMu - 0.5 * normalizedVar) * deltaT;
     double sqrtDeltaT = std::sqrt(deltaT);
 
-    // Generate display paths (scalar implementation for first 50 paths)
+    // Generate display paths (using improved log-space approach)
     std::vector<std::vector<double>> displayPaths;
     const int displayPathsCount = std::min(50, paths);
     displayPaths.reserve(displayPathsCount);
@@ -147,16 +152,21 @@ SimulationResult SimulateGBMIntrinsicMT(
     std::mt19937 gen(rd());
     std::normal_distribution<double> d(0.0, 1.0);
 
+    double logStartPrice = std::log(startingPrice);
+    
     for (int i = 0; i < displayPathsCount; ++i) {
         std::vector<double> path;
         path.reserve(steps);
         path.push_back(startingPrice);
         
-        double price = startingPrice;
+        // IMPROVED: Stay in log-space during simulation
+        double logPrice = logStartPrice;
         for (int j = 1; j < steps; ++j) {
             double noise = d(gen);
-            price *= std::exp(partialComputation + normalizedStd * sqrtDeltaT * noise);
-            path.push_back(price);
+            // Accumulate log-returns
+            logPrice += partialComputation + normalizedStd * sqrtDeltaT * noise;
+            // Exponentiate for display purposes
+            path.push_back(std::exp(logPrice));
         }
         displayPaths.push_back(std::move(path));
     }
@@ -169,7 +179,7 @@ SimulationResult SimulateGBMIntrinsicMT(
     int pathsPerThread = paths / numThreads;
     int remainingPaths = paths % numThreads;
 
-    std::vector<double> averagePrices(numThreads);
+    std::vector<double> sumPrices(numThreads);
     std::vector<std::thread> threads;
     threads.reserve(numThreads);
 
@@ -185,7 +195,7 @@ SimulationResult SimulateGBMIntrinsicMT(
             partialComputation,
             normalizedStd,
             sqrtDeltaT,
-            std::ref(averagePrices),
+            std::ref(sumPrices),
             i
         );
     }
@@ -195,14 +205,16 @@ SimulationResult SimulateGBMIntrinsicMT(
         thread.join();
     }
 
-    // Calculate overall average
-    double totalAveragePrice = 0.0;
-    for (double price : averagePrices) {
-        totalAveragePrice += price;
+    // FIXED: Calculate overall average from total sum divided by total paths
+    double totalSum = 0.0;
+    for (double sum : sumPrices) {
+        totalSum += sum;
     }
-    totalAveragePrice /= numThreads;
+    double totalAveragePrice = totalSum / paths;
 
     return {displayPaths, totalAveragePrice};
 }
 
 } // namespace gbm
+
+

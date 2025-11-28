@@ -263,18 +263,30 @@ class ConfigPanel:
         GBMTheme.configure_label(start_label, 0, row)
         row += 1
         
-        self.start_date_entry = ttk.Entry(self.scrollable_frame)
-        self.start_date_entry.grid(row=row, column=0, columnspan=2, sticky="ew", padx=5, pady=2)
-        self.start_date_entry.config(font=GBMTheme.FONT)
+        self.start_date_cal = Calendar(
+            self.scrollable_frame,
+            selectmode='day',
+            date_pattern='yyyy-mm-dd',
+            background=GBMTheme.BG_COLOR,
+            foreground=GBMTheme.FG_COLOR,
+            font=GBMTheme.FONT
+        )
+        self.start_date_cal.grid(row=row, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
         row += 1
         
         end_label = ttk.Label(self.scrollable_frame, text="End Date:")
         GBMTheme.configure_label(end_label, 0, row)
         row += 1
         
-        self.end_date_entry = ttk.Entry(self.scrollable_frame)
-        self.end_date_entry.grid(row=row, column=0, columnspan=2, sticky="ew", padx=5, pady=2)
-        self.end_date_entry.config(font=GBMTheme.FONT)
+        self.end_date_cal = Calendar(
+            self.scrollable_frame,
+            selectmode='day',
+            date_pattern='yyyy-mm-dd',
+            background=GBMTheme.BG_COLOR,
+            foreground=GBMTheme.FG_COLOR,
+            font=GBMTheme.FONT
+        )
+        self.end_date_cal.grid(row=row, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
         row += 1
         
         # Simulation parameters section
@@ -389,8 +401,8 @@ class ConfigPanel:
         
         try:
             config = SimConfig(
-                start_date=self.start_date_entry.get(),
-                end_date=self.end_date_entry.get(),
+                start_date=self.start_date_cal.get_date(),
+                end_date=self.end_date_cal.get_date(),
                 steps=int(self.steps_spinbox.get()),
                 paths=int(self.paths_spinbox.get()),
                 engine=self.engine_combo.get(),

@@ -18,6 +18,14 @@ struct SystemCapabilities {
     uint32_t cache_line_size;
 };
 
+// Kahan summation for improved numerical stability with large sums
+inline void KahanAdd(double& sum, double& compensation, double value) {
+    double y = value - compensation;
+    double t = sum + y;
+    compensation = (t - sum) - y;
+    sum = t;
+}
+
 // Get system capabilities
 SystemCapabilities GetSystemCapabilities();
 
