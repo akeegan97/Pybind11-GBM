@@ -37,7 +37,7 @@ Makefile
 .DS_Store
 
 # Data files
-*.csv
+
 !example*.csv
 
 # Compiled extensions
@@ -53,3 +53,6 @@ Makefile
 Thumbs.db
 .venv/pyvenv.cfg
 pyrightconfig.json
+datasets/APPL_historicals.csv
+.gitignore
+datasets/SPY historicals.csv

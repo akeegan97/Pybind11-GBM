@@ -125,7 +125,6 @@ class GBMMainFrame:
         except Exception as e:
             print(f"Simulation error: {e}")
 
-
     def _display_predictions(self):
         """Display GBM prediction plots in predictions tab."""
         if self.sim_result is None:

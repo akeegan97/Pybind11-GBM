@@ -123,7 +123,8 @@ class GBMService:
             paths=config.paths,
             engine=engine_type,
             threads=config.threads,
-            seed=config.seed
+            seed=config.seed,
+            display_paths=config.display_paths
         )
         
         elapsed = time.perf_counter() - start_time

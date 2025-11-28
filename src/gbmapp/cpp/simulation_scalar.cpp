@@ -12,7 +12,8 @@ SimulationResult SimulateGBMScalar(
     double normalizedVar,
     double normalizedStd,
     int steps,
-    int paths
+    int paths,
+    int displayPathsRequested
 ) {
     // Validate parameters
     ValidateParameters(startingPrice, normalizedMu, normalizedVar, normalizedStd, steps, paths);
@@ -27,8 +28,8 @@ SimulationResult SimulateGBMScalar(
     std::mt19937 gen(rd());
     std::normal_distribution<double> d(0.0, 1.0);
     
-    // Prepare display paths (first 50 paths)
-    const int displayPathsCount = std::min(50, paths);
+    // Prepare display paths (user-specified count, capped at total paths)
+    const int displayPathsCount = std::min(displayPathsRequested, paths);
     std::vector<std::vector<double>> displayPaths;
     displayPaths.reserve(displayPathsCount);
     

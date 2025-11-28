@@ -7,9 +7,9 @@ namespace py = pybind11;
 
 // Forward declarations of simulation functions
 namespace gbm {
-    SimulationResult SimulateGBMScalar(double, double, double, double, int, int);
-    SimulationResult SimulateGBMMultiThreaded(double, double, double, double, int, int);
-    SimulationResult SimulateGBMIntrinsicMT(double, double, double, double, int, int);
+    SimulationResult SimulateGBMScalar(double, double, double, double, int, int, int);
+    SimulationResult SimulateGBMMultiThreaded(double, double, double, double, int, int, int);
+    SimulationResult SimulateGBMIntrinsicMT(double, double, double, double, int, int, int);
 }
 
 PYBIND11_MODULE(simulation, m) {
@@ -39,6 +39,7 @@ PYBIND11_MODULE(simulation, m) {
         py::arg("normalized_std"),
         py::arg("steps"),
         py::arg("paths"),
+        py::arg("display_paths") = 50,
         R"pbdoc(
             Simulate Geometric Brownian Motion paths using scalar implementation.
             
@@ -52,10 +53,11 @@ PYBIND11_MODULE(simulation, m) {
                 normalized_std: Standard deviation (volatility coefficient)
                 steps: Number of time steps in each path (must be > 0)
                 paths: Number of simulation paths (must be > 0)
+                display_paths: Number of paths to return for visualization (default 50)
             
             Returns:
                 Tuple of (display_paths, average_final_price) where display_paths
-                contains up to 50 complete price paths for visualization
+                contains up to display_paths complete price paths for visualization
         )pbdoc");
     
     // Multi-threaded implementation
@@ -67,6 +69,7 @@ PYBIND11_MODULE(simulation, m) {
         py::arg("normalized_std"),
         py::arg("steps"),
         py::arg("paths"),
+        py::arg("display_paths") = 50,
         R"pbdoc(
             Simulate Geometric Brownian Motion paths using multi-threaded implementation.
             
@@ -95,6 +98,7 @@ PYBIND11_MODULE(simulation, m) {
         py::arg("normalized_std"),
         py::arg("steps"),
         py::arg("paths"),
+        py::arg("display_paths") = 50,
         R"pbdoc(
             Simulate Geometric Brownian Motion paths using SIMD-optimized implementation.
             
@@ -124,7 +128,8 @@ PYBIND11_MODULE(simulation, m) {
         py::arg("normalized_var"),
         py::arg("normalized_std"),
         py::arg("steps"),
-        py::arg("paths"));
+        py::arg("paths"),
+        py::arg("display_paths") = 50);
     
     // Parameter validation function
     m.def("ValidateParameters", &gbm::ValidateParameters,

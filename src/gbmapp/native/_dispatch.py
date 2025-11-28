@@ -72,7 +72,8 @@ class SimulationDispatcher:
         paths: int,
         engine: EngineType = EngineType.AUTO,
         threads: int | None = None,
-        seed: int | None = None
+        seed: int | None = None,
+        display_paths: int = 50
     ) -> Tuple[np.ndarray, float]:
         """Execute GBM simulation using specified engine.
 
@@ -86,6 +87,7 @@ class SimulationDispatcher:
             engine: Engine type to use
             threads: Number of threads (for MT engines)
             seed: Random seed (optional)
+            display_paths: Number of paths to return for visualization
 
         Returns:
             Tuple of (walks array, average final price)
@@ -109,19 +111,19 @@ class SimulationDispatcher:
         # Route to appropriate engine
         if engine == EngineType.SCALAR:
             return SimulationDispatcher._run_scalar(
-                starting_price, mu, variance, sigma, steps, paths
+                starting_price, mu, variance, sigma, steps, paths, display_paths
             )
         elif engine == EngineType.MT:
             return SimulationDispatcher._run_multithreaded(
-                starting_price, mu, variance, sigma, steps, paths, threads
+                starting_price, mu, variance, sigma, steps, paths, threads, display_paths
             )
         elif engine == EngineType.SIMD:
             return SimulationDispatcher._run_simd(
-                starting_price, mu, variance, sigma, steps, paths, threads
+                starting_price, mu, variance, sigma, steps, paths, threads, display_paths
             )
         elif engine == EngineType.AUTO:
             return SimulationDispatcher._run_auto(
-                starting_price, mu, variance, sigma, steps, paths
+                starting_price, mu, variance, sigma, steps, paths, display_paths
             )
         else:
             raise ValueError(f"Unsupported engine type: {engine}")
@@ -133,12 +135,13 @@ class SimulationDispatcher:
         variance: float,
         sigma: float,
         steps: int,
-        paths: int
+        paths: int,
+        display_paths: int
     ) -> Tuple[np.ndarray, float]:
         """Run scalar (single-threaded) simulation."""
         if simulation is not None and hasattr(simulation, 'SimulateGBMScalar'):
             return simulation.SimulateGBMScalar(
-                starting_price, mu, variance, sigma, steps, paths
+                starting_price, mu, variance, sigma, steps, paths, display_paths
             )
         elif simulation is not None:
             # Fallback to basic implementation
@@ -156,12 +159,13 @@ class SimulationDispatcher:
         sigma: float,
         steps: int,
         paths: int,
-        threads: int | None
+        threads: int | None,
+        display_paths: int
     ) -> Tuple[np.ndarray, float]:
         """Run multi-threaded simulation."""
         if simulation is not None and hasattr(simulation, 'SimulateGBMMultiThreaded'):
             return simulation.SimulateGBMMultiThreaded(
-                starting_price, mu, variance, sigma, steps, paths
+                starting_price, mu, variance, sigma, steps, paths, display_paths
             )
         elif simulation is not None:
             # Fallback to basic implementation
@@ -179,12 +183,13 @@ class SimulationDispatcher:
         sigma: float,
         steps: int,
         paths: int,
-        threads: int | None
+        threads: int | None,
+        display_paths: int
     ) -> Tuple[np.ndarray, float]:
         """Run SIMD-optimized multi-threaded simulation."""
         if simulation is not None and hasattr(simulation, 'SimulateGBMIntrinsicMT'):
             return simulation.SimulateGBMIntrinsicMT(
-                starting_price, mu, variance, sigma, steps, paths
+                starting_price, mu, variance, sigma, steps, paths, display_paths
             )
         else:
             # Fallback to multi-threaded
@@ -199,7 +204,8 @@ class SimulationDispatcher:
         variance: float,
         sigma: float,
         steps: int,
-        paths: int
+        paths: int,
+        display_paths: int
     ) -> Tuple[np.ndarray, float]:
         """Run simulation with automatic engine selection."""
         # Auto-select best available engine based on hardware capabilities
@@ -210,15 +216,15 @@ class SimulationDispatcher:
                 hasattr(simulation, 'SimulateGBMIntrinsicMT') and
                 caps.get('has_avx2', False)):
             return SimulationDispatcher._run_simd(
-                starting_price, mu, variance, sigma, steps, paths, None
+                starting_price, mu, variance, sigma, steps, paths, None, display_paths
             )
         elif simulation is not None and hasattr(simulation, 'SimulateGBMMultiThreaded'):
             return SimulationDispatcher._run_multithreaded(
-                starting_price, mu, variance, sigma, steps, paths, None
+                starting_price, mu, variance, sigma, steps, paths, None, display_paths
             )
         else:
             return SimulationDispatcher._run_scalar(
-                starting_price, mu, variance, sigma, steps, paths
+                starting_price, mu, variance, sigma, steps, paths, display_paths
             )
 
     @staticmethod

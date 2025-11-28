@@ -1,85 +1,72 @@
-// Multi-threaded GBM simulation implementation
+// gbm_mt.cpp
 #include "simulation_common.h"
-#include <random>
-#include <cmath>
-#include <thread>
-#include <atomic>
+
 #include <algorithm>
-#include <mutex>
+#include <cmath>
+#include <random>
+#include <thread>
+#include <vector>
+#include <stdexcept>
 
 namespace gbm {
 
+static inline void RequireValidParams(
+    double startingPrice, double normalizedMu, double normalizedVar, double normalizedStd,
+    int steps, int paths
+) {
+    if (!ValidateParameters(startingPrice, normalizedMu, normalizedVar, normalizedStd, steps, paths)) {
+        throw std::invalid_argument("Invalid GBM parameters");
+    }
+}
+
 namespace {
 
-void AddToAtomic(std::atomic<double>& atomicValue, double valueToAdd) {
-    double currentValue = atomicValue.load();
-    while (!atomicValue.compare_exchange_weak(currentValue, currentValue + valueToAdd));
-}
+struct alignas(64) PaddedDouble { double v = 0.0; };
 
-void SimulatePathsWorker(
+static inline void WorkerLogSpace(
     int numPaths,
     int steps,
-    double startingPrice,
+    double logStartPrice,
     double partialComputation,
-    double normalizedStd,
-    double sqrtDeltaT,
-    std::atomic<double>& totalAverage,
-    std::vector<std::vector<double>>& displayPaths,
-    std::mutex& displayPathsMutex,
-    bool collectDisplayPaths
+    double volStep, // normalizedStd * sqrtDeltaT
+    PaddedDouble& outSumFinalPrices,
+    std::vector<std::vector<double>>* outDisplayPaths,
+    int maxDisplayPaths
 ) {
-    std::vector<std::vector<double>> localDisplayPaths;
-    double sumFinalPrices = 0.0;
-    double compensation = 0.0;  // For Kahan summation
-    double logStartPrice = std::log(startingPrice);  // IMPROVED: Pre-compute log
-    
-    // Thread-local random number generation
+    double sum = 0.0;
+    double comp = 0.0; // Kahan comp
+
+    // Seed RNG with random_device for true randomness
+    // For reproducible results, could use a seed based on thread ID
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::normal_distribution<double> d(0.0, 1.0);
-    
+    std::normal_distribution<double> nd(0.0, 1.0);
+
     for (int i = 0; i < numPaths; ++i) {
-        double logPrice = logStartPrice;  // IMPROVED: Start in log-space
+        double lp = logStartPrice;
+
+        const bool collect = (outDisplayPaths != nullptr) &&
+                             (static_cast<int>(outDisplayPaths->size()) < maxDisplayPaths);
+
         std::vector<double> path;
-        
-        if (collectDisplayPaths && localDisplayPaths.size() < 50) {
+        if (collect) {
             path.reserve(steps);
-            path.push_back(startingPrice);  // First point is starting price
+            path.push_back(std::exp(logStartPrice));
         }
-        
-        // Simulate price path in log-space
+
         for (int j = 1; j < steps; ++j) {
-            // IMPROVED: Accumulate log-returns
-            logPrice += partialComputation + normalizedStd * sqrtDeltaT * d(gen);
-            
-            if (collectDisplayPaths && localDisplayPaths.size() < 50) {
-                // Exponentiate for display
-                path.push_back(std::exp(logPrice));
-            }
+            lp += partialComputation + volStep * nd(gen);
+            if (collect) path.push_back(std::exp(lp));
         }
-        
-        // IMPROVED: Exponentiate only once at end
-        KahanAdd(sumFinalPrices, compensation, std::exp(logPrice));
-        
-        if (collectDisplayPaths && localDisplayPaths.size() < 50) {
-            localDisplayPaths.push_back(std::move(path));
-        }
+
+        KahanAdd(sum, comp, std::exp(lp));
+        if (collect) outDisplayPaths->push_back(std::move(path));
     }
-    
-    // Add local average to global atomic average
-    double localAverage = sumFinalPrices / numPaths;
-    AddToAtomic(totalAverage, localAverage);
-    
-    // Thread-safe transfer of display paths
-    if (collectDisplayPaths && !localDisplayPaths.empty()) {
-        std::lock_guard<std::mutex> lock(displayPathsMutex);
-        displayPaths.insert(displayPaths.end(),
-                          std::make_move_iterator(localDisplayPaths.begin()),
-                          std::make_move_iterator(localDisplayPaths.end()));
-    }
+
+    outSumFinalPrices.v = sum;
 }
 
-} // anonymous namespace
+} // namespace
 
 SimulationResult SimulateGBMMultiThreaded(
     double startingPrice,
@@ -87,59 +74,74 @@ SimulationResult SimulateGBMMultiThreaded(
     double normalizedVar,
     double normalizedStd,
     int steps,
-    int paths
+    int paths,
+    int displayPathsRequested
 ) {
-    // Validate parameters
-    ValidateParameters(startingPrice, normalizedMu, normalizedVar, normalizedStd, steps, paths);
-    
-    // Pre-compute constants
-    double deltaT = 1.0 / steps;
-    double partialComputation = (normalizedMu - 0.5 * normalizedVar) * deltaT;
-    double sqrtDeltaT = std::sqrt(deltaT);
-    
-    // Determine thread count
-    unsigned int numThreads = std::thread::hardware_concurrency();
-    if (numThreads == 0) numThreads = 1;
-    
-    // Distribute work across threads
-    int pathsPerThread = paths / numThreads;
-    int remainingPaths = paths % numThreads;
-    
-    std::atomic<double> totalAverage(0.0);
+    RequireValidParams(startingPrice, normalizedMu, normalizedVar, normalizedStd, steps, paths);
+
+    displayPathsRequested = std::max(0, std::min(displayPathsRequested, paths));
+
+    const double deltaT = 1.0 / steps;
+    const double partialComp = (normalizedMu - 0.5 * normalizedVar) * deltaT;
+    const double volStep = normalizedStd * std::sqrt(deltaT);
+    const double logStart = std::log(startingPrice);
+
+    // Generate display paths first (separate from parallel computation)
     std::vector<std::vector<double>> displayPaths;
-    std::mutex displayPathsMutex;
+    displayPaths.reserve(static_cast<size_t>(displayPathsRequested));
+    if (displayPathsRequested > 0) {
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::normal_distribution<double> nd(0.0, 1.0);
+
+        for (int i = 0; i < displayPathsRequested; ++i) {
+            std::vector<double> path;
+            path.reserve(steps);
+            path.push_back(startingPrice);
+
+            double lp = logStart;
+            for (int j = 1; j < steps; ++j) {
+                lp += partialComp + volStep * nd(gen);
+                path.push_back(std::exp(lp));
+            }
+            displayPaths.push_back(std::move(path));
+        }
+    }
+
+    auto caps = GetSystemCapabilities();
+    unsigned int numThreads = std::max(1u, caps.num_threads);
+    numThreads = std::min<unsigned int>(numThreads, static_cast<unsigned int>(paths));
+
+    const int pathsPerThread = paths / static_cast<int>(numThreads);
+    const int rem = paths % static_cast<int>(numThreads);
+
+    std::vector<PaddedDouble> sums(numThreads);
     std::vector<std::thread> threads;
     threads.reserve(numThreads);
-    
-    // Launch worker threads
-    for (unsigned int i = 0; i < numThreads; ++i) {
-        int threadPaths = pathsPerThread + (i < static_cast<unsigned>(remainingPaths) ? 1 : 0);
-        bool collectPaths = (i == 0);  // Only first thread collects display paths
-        
+
+    for (unsigned int t = 0; t < numThreads; ++t) {
+        const int threadPaths = pathsPerThread + (t < static_cast<unsigned>(rem) ? 1 : 0);
+
         threads.emplace_back(
-            SimulatePathsWorker,
+            WorkerLogSpace,
             threadPaths,
             steps,
-            startingPrice,
-            partialComputation,
-            normalizedStd,
-            sqrtDeltaT,
-            std::ref(totalAverage),
-            std::ref(displayPaths),
-            std::ref(displayPathsMutex),
-            collectPaths
+            logStart,
+            partialComp,
+            volStep,
+            std::ref(sums[t]),
+            nullptr,  // No display path collection in workers
+            0
         );
     }
-    
-    // Wait for all threads to complete
-    for (auto& thread : threads) {
-        thread.join();
-    }
-    
-    // Calculate average across all threads
-    double averagePredictedPrice = totalAverage / numThreads;
-    
-    return {displayPaths, averagePredictedPrice};
+
+    for (auto& th : threads) th.join();
+
+    double totalSum = 0.0;
+    for (const auto& s : sums) totalSum += s.v;
+
+    const double avg = totalSum / static_cast<double>(paths);
+    return {displayPaths, avg};
 }
 
 } // namespace gbm
