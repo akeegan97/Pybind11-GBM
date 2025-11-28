@@ -52,3 +52,4 @@ Makefile
 # OS
 Thumbs.db
 .venv/pyvenv.cfg
+pyrightconfig.json
